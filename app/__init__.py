@@ -6,7 +6,9 @@ FAILURE_INJECTION_PATH = os.path.join(EXPERIMENTS_PATH, "failure injection")
 NORMAL_PATH = os.path.join(EXPERIMENTS_PATH, "normal")
 NORMAL_GCLOUD_METRICS_PATH = os.path.join(NORMAL_PATH, "gcloud-metrics")
 METRIC_TYPE_MAP_PATH = os.path.join(NORMAL_GCLOUD_METRICS_PATH, "metric_type_map.csv")
-TARGET_METRICS_PATH = os.path.join(NORMAL_PATH, "target_metrics.csv")
+PROMETHEUS_TARGET_METRICS_PATH = os.path.join(
+    NORMAL_PATH, "prometheus_target_metrics.csv"
+)
 GCLOUD_TARGET_METRICS_PATH = os.path.join(NORMAL_PATH, "gcloud_target_metrics.csv")
 NORMAL_GCLOUD_AGGREGATED_METRICS_PATH = os.path.join(
     NORMAL_GCLOUD_METRICS_PATH, "gcloud_aggregated"

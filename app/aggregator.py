@@ -6,15 +6,6 @@ import pandas as pd
 
 
 class Aggregator(ABC):
-    @abstractmethod
-    def aggregate_all_metrics(self):
-        """Aggregate all available metrics to reduce dimensionality."""
-
-    @abstractmethod
-    def merge_metrics(self):
-        """Merge all metrics into one dataframe."""
-        pass
-
     @staticmethod
     def read_df_kpi_map(metric_index: int, kpi_map_folder_path: str) -> pd.DataFrame:
         kpi_map_path_json = os.path.join(
@@ -34,3 +25,13 @@ class Aggregator(ABC):
             return (
                 pd.read_csv(kpi_map_path_csv).set_index("Unnamed: 0").sort_index(axis=1)
             )
+
+    @staticmethod
+    def reduce_cumulative(series: pd.Series) -> pd.Series:
+        series = series.sub(series.shift())
+        series = series.mask(series < 0)
+        return series
+
+    @staticmethod
+    def index_list(series) -> list:
+        return series.to_list()

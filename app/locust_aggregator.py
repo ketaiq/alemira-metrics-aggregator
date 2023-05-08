@@ -22,7 +22,14 @@ class LocustAggregator(Aggregator):
     def aggregate_all_metrics(self):
         df_stats = pd.read_csv(self.metrics_path)
         df_stats = df_stats[df_stats["Name"] == "Aggregated"].drop(
-            columns=["Type", "Name"]
+            columns=[
+                "Type",
+                "Name",
+                "Total Request Count",
+                "Total Failure Count",
+                "Total Min Response Time",
+                "Total Max Response Time",
+            ]
         )
         df_stats["Timestamp"] = pd.to_datetime(
             df_stats["Timestamp"], unit="s"
@@ -43,28 +50,19 @@ class LocustAggregator(Aggregator):
                 "99.9%": "max",
                 "99.99%": "max",
                 "100%": "max",
-                "Total Request Count": "sum",
-                "Total Failure Count": "sum",
                 "Total Median Response Time": "median",
                 "Total Average Response Time": "mean",
-                "Total Min Response Time": "min",
-                "Total Max Response Time": "max",
                 "Total Average Content Size": "mean",
             }
         )
-        if len(df_stats) > 60 * 24:
-            df_stats = df_stats[1:1441]
         df_stats.index.rename("timestamp", inplace=True)
         df_stats = df_stats.add_prefix("lm-").reset_index()
         df_stats.to_csv(self.aggregated_metrics_path, index=False)
 
-    def merge_metrics(self):
-        pass
-
     @staticmethod
-    def merge_normal_metrics(metrics_parent_path):
+    def merge_normal_metrics(metrics_parent_path, folders):
         df_list = []
-        for folder in os.listdir(metrics_parent_path):
+        for folder in folders:
             if folder.startswith("day-"):
                 agg_stats_path = os.path.join(
                     metrics_parent_path, folder, "locust_aggregated_stats.csv"

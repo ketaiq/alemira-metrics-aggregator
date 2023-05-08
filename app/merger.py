@@ -6,8 +6,9 @@ from app import (
     EXPERIMENTS_PATH,
     FAILURE_INJECTION_PATH,
     GCLOUD_TARGET_METRICS_PATH,
+    NORMAL_GCLOUD_METRICS_PATH,
     NORMAL_PATH,
-    TARGET_METRICS_PATH,
+    PROMETHEUS_TARGET_METRICS_PATH,
 )
 
 from app.aggregator import Aggregator
@@ -132,30 +133,47 @@ def merge_gcloud_prometheus_metrics_in_one_experiment(
         df_metric = pd.read_csv(metric_path).set_index("timestamp")
         prometheus_df_list.append(df_metric.add_prefix(f"pm-{metric_index}-"))
     df_prometheus = pd.concat(prometheus_df_list, axis=1)
-    return pd.concat([df_gcloud, df_prometheus], axis=1)
+    df_gp = pd.concat([df_gcloud, df_prometheus], axis=1)
+    df_gp.index = pd.to_datetime(df_gp.index)
+    return df_gp
+
+
+def merge_gcloud_prometheus_in_one_experiment(
+    df_gcloud_target_metrics: pd.DataFrame,
+    gcloud_metrics_path: str,
+):
+    gcloud_df_list = []
+    for metric_index in df_gcloud_target_metrics.index:
+        metric_path = os.path.join(gcloud_metrics_path, f"metric-{metric_index}.csv")
+        df_metric = pd.read_csv(metric_path).set_index("timestamp")
+        df_metric.index = pd.to_datetime(df_metric.index)
+        gcloud_df_list.append(df_metric.add_prefix(f"gm-{metric_index}-"))
+    return pd.concat(gcloud_df_list, axis=1).sort_index()
 
 
 def merge_normal_metrics():
     gcloud_paths = [
-        os.path.join(EXPERIMENTS_PATH, "gcloud_unified", folder)
-        for folder in os.listdir(os.path.join(EXPERIMENTS_PATH, "gcloud_unified"))
-        if folder.startswith("day-")
+        os.path.join(NORMAL_GCLOUD_METRICS_PATH, folder)
+        for folder in os.listdir(NORMAL_GCLOUD_METRICS_PATH)
+        if folder.startswith("gcloud_aggregated_day_")
     ]
     prometheus_paths = [
-        os.path.join(EXPERIMENTS_PATH, "prometheus_unified", folder)
-        for folder in os.listdir(os.path.join(EXPERIMENTS_PATH, "prometheus_unified"))
-        if folder.startswith("day-")
+        os.path.join(NORMAL_PATH, f"day-{i}", "prometheus_aggregated")
+        for i in range(1, 15)
     ]
     if len(gcloud_paths) != len(prometheus_paths):
         print("Two paths list have different lengths!")
     df_gcloud_target_metrics = pd.read_csv(GCLOUD_TARGET_METRICS_PATH).set_index(
         "index"
     )
-    df_prometheus_target_metrics = pd.read_csv(TARGET_METRICS_PATH)
+    df_prometheus_target_metrics = pd.read_csv(PROMETHEUS_TARGET_METRICS_PATH)
     df_prometheus_target_metrics.index += 1
     df_gp_list = []
     for i in range(len(gcloud_paths)):
         df_gp_list.append(
+            # merge_gcloud_prometheus_in_one_experiment(
+            #     df_gcloud_target_metrics, gcloud_paths[i]
+            # )
             merge_gcloud_prometheus_metrics_in_one_experiment(
                 df_gcloud_target_metrics,
                 df_prometheus_target_metrics,
@@ -163,17 +181,20 @@ def merge_normal_metrics():
                 prometheus_paths[i],
             )
         )
-    df_gp = pd.concat(df_gp_list)
+    df_gp = pd.concat(df_gp_list).sort_index()
     df_locust = pd.read_csv(
         os.path.join(NORMAL_PATH, "locust_normal_stats.csv")
     ).set_index("timestamp")
+    df_locust.index = pd.to_datetime(df_locust.index)
     df_complete = df_locust.join(df_gp)
     if len(df_complete.index) != len(df_complete.index.drop_duplicates()):
         df_complete = df_complete.groupby("timestamp").agg("mean")
     num_rows = len(df_complete)
     num_columns = len(df_complete.columns)
     print(f"{num_rows} rows x {num_columns} columns")
-    df_complete.to_csv(os.path.join(NORMAL_PATH, "complete_normal_time_series.csv"))
+    df_complete.sort_index().to_csv(
+        os.path.join(NORMAL_PATH, "complete_normal_time_series.csv")
+    )
 
 
 def merge_faulty_metrics_from_unified():
@@ -192,7 +213,7 @@ def merge_faulty_metrics_from_unified():
     df_gcloud_target_metrics = pd.read_csv(GCLOUD_TARGET_METRICS_PATH).set_index(
         "index"
     )
-    df_prometheus_target_metrics = pd.read_csv(TARGET_METRICS_PATH)
+    df_prometheus_target_metrics = pd.read_csv(PROMETHEUS_TARGET_METRICS_PATH)
     df_prometheus_target_metrics.index += 1
     for i in range(len(gcloud_paths)):
         folder = os.path.basename(prometheus_paths[i]).removeprefix("faulty-")
@@ -228,14 +249,17 @@ def merge_faulty_metrics_from_aggregated(common_prefix: str):
         for folder in os.listdir(FAILURE_INJECTION_PATH)
         if folder.startswith(common_prefix)
     ]
-    folders = [folder for folder in os.listdir(FAILURE_INJECTION_PATH)
-        if folder.startswith(common_prefix)]
+    folders = [
+        folder
+        for folder in os.listdir(FAILURE_INJECTION_PATH)
+        if folder.startswith(common_prefix)
+    ]
     if len(gcloud_paths) != len(prometheus_paths):
         print("Two paths list have different lengths!")
     df_gcloud_target_metrics = pd.read_csv(GCLOUD_TARGET_METRICS_PATH).set_index(
         "index"
     )
-    df_prometheus_target_metrics = pd.read_csv(TARGET_METRICS_PATH)
+    df_prometheus_target_metrics = pd.read_csv(PROMETHEUS_TARGET_METRICS_PATH)
     df_prometheus_target_metrics.index += 1
     for i in range(len(gcloud_paths)):
         folder = folders[i]
@@ -246,9 +270,13 @@ def merge_faulty_metrics_from_aggregated(common_prefix: str):
             gcloud_paths[i],
             prometheus_paths[i],
         )
+        # df_gp = merge_gcloud_prometheus_in_one_experiment(
+        #     df_gcloud_target_metrics, gcloud_paths[i]
+        # )
         df_locust = pd.read_csv(
             os.path.join(FAILURE_INJECTION_PATH, folder, "locust_aggregated_stats.csv")
         ).set_index("timestamp")
+        df_locust.index = pd.to_datetime(df_locust.index)
         df_complete = df_gp.join(df_locust, how="inner")
         if len(df_complete.index) != len(df_complete.index.drop_duplicates()):
             df_complete = df_complete.groupby("timestamp").agg("mean")
@@ -258,3 +286,34 @@ def merge_faulty_metrics_from_aggregated(common_prefix: str):
         df_complete.to_csv(
             os.path.join(FAILURE_INJECTION_PATH, folder, f"{folder}.csv")
         )
+
+
+def merge_faulty_metrics_from_one_experiment(exp_name: str):
+    gcloud_path = os.path.join(FAILURE_INJECTION_PATH, exp_name, "gcloud_aggregated")
+    prometheus_path = os.path.join(
+        FAILURE_INJECTION_PATH, exp_name, "prometheus_aggregated"
+    )
+    df_gcloud_target_metrics = pd.read_csv(GCLOUD_TARGET_METRICS_PATH).set_index(
+        "index"
+    )
+    df_prometheus_target_metrics = pd.read_csv(PROMETHEUS_TARGET_METRICS_PATH)
+    df_prometheus_target_metrics.index += 1
+    df_gp = merge_gcloud_prometheus_metrics_in_one_experiment(
+        df_gcloud_target_metrics,
+        df_prometheus_target_metrics,
+        gcloud_path,
+        prometheus_path,
+    )
+    df_locust = pd.read_csv(
+        os.path.join(FAILURE_INJECTION_PATH, exp_name, "locust_aggregated_stats.csv")
+    ).set_index("timestamp")
+    df_locust.index = pd.to_datetime(df_locust.index)
+    df_complete = df_gp.join(df_locust, how="inner")
+    if len(df_complete.index) != len(df_complete.index.drop_duplicates()):
+        df_complete = df_complete.groupby("timestamp").agg("mean")
+    num_rows = len(df_complete)
+    num_columns = len(df_complete.columns)
+    print(f"{num_rows} rows x {num_columns} columns")
+    df_complete.to_csv(
+        os.path.join(FAILURE_INJECTION_PATH, exp_name, f"{exp_name}.csv")
+    )

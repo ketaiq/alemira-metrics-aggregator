@@ -6,6 +6,7 @@ import warnings
 import jsonlines
 import pandas as pd
 from app.aggregator import Aggregator
+from app.gcloud_metric_kind import GCloudMetricKind
 
 
 class GCloudAggregator(Aggregator):
@@ -13,7 +14,7 @@ class GCloudAggregator(Aggregator):
         self,
         metrics_parent_path: str,
         metrics_folder: str,
-        metric_type_map_path: str,
+        target_metrics_path: str,
         output_suffix: str = "",
         referred_kpi_map_path: str = None,
     ):
@@ -27,7 +28,7 @@ class GCloudAggregator(Aggregator):
         self.complete_time_series_path = os.path.join(
             metrics_parent_path, f"gcloud-complete-time-series{output_suffix}.csv"
         )
-        self.metric_type_map = pd.read_csv(metric_type_map_path).set_index("index")
+        self.df_target_metrics = pd.read_csv(target_metrics_path).set_index("index")
         self.referred_agg_path = referred_kpi_map_path
         if not os.path.exists(self.merged_submetrics_path):
             os.mkdir(self.merged_submetrics_path)
@@ -74,13 +75,7 @@ class GCloudAggregator(Aggregator):
         )
 
     def merge_all_submetrics(self):
-        metric_type_folders = [
-            folder
-            for folder in os.listdir(self.metrics_path)
-            if folder.startswith("metric-type")
-        ]
-        for folder in metric_type_folders:
-            metric_index = folder.removeprefix("metric-type-")
+        for metric_index in self.df_target_metrics.index:
             metric_path = os.path.join(self.metrics_path, f"metric-type-{metric_index}")
             self._merge_submetrics(metric_path, metric_index)
 
@@ -88,11 +83,17 @@ class GCloudAggregator(Aggregator):
         metric_path = os.path.join(
             self.merged_submetrics_path, f"metric-{metric_index}.csv"
         )
-        return pd.read_csv(metric_path)
+        df_metric = pd.read_csv(metric_path)
+        df_metric["timestamp"] = pd.to_datetime(df_metric["timestamp"])
+        df_metric = df_metric.set_index("timestamp").sort_index()
+        metric_kind = self.df_target_metrics.loc[metric_index]["kind"]
+        if metric_kind == GCloudMetricKind.CUMULATIVE.value:
+            df_metric = df_metric.apply(Aggregator.reduce_cumulative)
+        return df_metric
 
     def aggregate_one_metric(self, metric_index: int):
         """Aggregate all available KPIs in one metric to reduce dimensionality."""
-        metric_name = self.metric_type_map.loc[metric_index]["metric_type"]
+        metric_name = self.df_target_metrics.loc[metric_index]["name"]
         df_kpi_map = Aggregator.read_df_kpi_map(
             metric_index, self.merged_submetrics_path
         )
@@ -121,10 +122,6 @@ class GCloudAggregator(Aggregator):
             print(f"Unsupported aggregation on {metric_name}")
 
     @staticmethod
-    def index_list(series) -> list:
-        return series.to_list()
-
-    @staticmethod
     def is_distribution(cols: list) -> bool:
         for col in cols:
             if "count" in col or "mean" in col or "sum_of_squared_deviation" in col:
@@ -148,7 +145,7 @@ class GCloudAggregator(Aggregator):
         df_same = (
             df_same.reset_index()
             .groupby(group_columns)
-            .agg(GCloudAggregator.index_list)
+            .agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_same)
 
@@ -162,7 +159,7 @@ class GCloudAggregator(Aggregator):
         df_kpi_map_unique = (
             df_kpi_map_unique.reset_index()
             .groupby(group_columns)
-            .agg(GCloudAggregator.index_list)
+            .agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_kpi_map_unique)
 
@@ -175,7 +172,7 @@ class GCloudAggregator(Aggregator):
         df_kpi_map_unique = (
             df_kpi_map.reset_index()
             .groupby(group_columns)
-            .agg(GCloudAggregator.index_list)
+            .agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_kpi_map_unique)
 
@@ -188,14 +185,14 @@ class GCloudAggregator(Aggregator):
         df_kpi_map_unique = (
             df_kpi_map.reset_index()
             .groupby(group_columns)
-            .agg(GCloudAggregator.index_list)
+            .agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_kpi_map_unique)
 
     def adapt_no_agg(self, metric_index: int, df_kpi_map: pd.DataFrame):
         """Adapt metrics no need for aggregation."""
         print(f"Adapting metric {metric_index} without aggregation ...")
-        df_metric = self.get_df_metric(metric_index).set_index("timestamp")
+        df_metric = self.get_df_metric(metric_index)
         new_kpi_map_list = []
         if self.referred_agg_path is not None:
             df_referred_kpi_map = Aggregator.read_df_kpi_map(
@@ -227,6 +224,7 @@ class GCloudAggregator(Aggregator):
                     inplace=True,
                 )
                 new_kpi_map_index += 1
+
         with open(
             os.path.join(
                 self.aggregated_metrics_path, f"metric-{metric_index}-kpi-map.json"
@@ -245,10 +243,7 @@ class GCloudAggregator(Aggregator):
             df_metric_agg = df_metric_to_agg.agg(
                 [
                     "min",
-                    "max",
                     "mean",
-                    "median",
-                    "std",
                     "count",
                 ],
                 axis=1,
@@ -256,7 +251,7 @@ class GCloudAggregator(Aggregator):
             return df_metric_agg
 
     def aggregate(self, metric_index: int, df_kpi_map_unique: pd.DataFrame):
-        df_metric = self.get_df_metric(metric_index).set_index("timestamp")
+        df_metric = self.get_df_metric(metric_index)
         if self.referred_agg_path is not None:
             df_referred_kpi_map = Aggregator.read_df_kpi_map(
                 metric_index, self.referred_agg_path
@@ -293,13 +288,13 @@ class GCloudAggregator(Aggregator):
                 set(df_kpi_map_unique.loc[i]["index_list"]) & set(indices_with_metrics)
             )
             if GCloudAggregator.is_distribution(df_metric.columns):
-                for suffix in ["count", "mean", "sum_of_squared_deviation"]:
+                for suffix in ["count", "mean"]:
                     columns_to_merge = [f"kpi-{i}-{suffix}" for i in valid_indices]
                     df_metric_to_agg = df_metric[columns_to_merge]
                     df_metric_agg = (
                         GCloudAggregator.gen_df_metric_agg(df_metric_to_agg)
                         .add_prefix(f"agg-kpi-{new_kpi_map_index}-")
-                        .add_suffix(f"-{suffix}")
+                        .add_suffix(f"-d{suffix}")
                     )
                     df_agg_list.append(df_metric_agg)
             else:
@@ -324,11 +319,13 @@ class GCloudAggregator(Aggregator):
             )
 
     def aggregate_all_metrics(self):
+        """Aggregate all available metrics to reduce dimensionality."""
         metric_indices = self.get_metric_indices()
         for metric_index in metric_indices:
             self.aggregate_one_metric(metric_index)
 
     def merge_metrics(self):
+        """Merge all metrics into one dataframe."""
         df_all_list = []
         metric_indices = self.get_metric_indices()
         for metric_index in metric_indices:

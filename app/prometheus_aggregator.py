@@ -66,7 +66,6 @@ class PrometheusAggregator(Aggregator):
         metrics_folder: str,
         target_metrics_path: str,
         output_suffix: str = "",
-        referred_kpi_map_path: str = None,
     ):
         self.metrics_path = os.path.join(metrics_parent_path, metrics_folder)
         self.merged_submetrics_path = os.path.join(
@@ -80,11 +79,14 @@ class PrometheusAggregator(Aggregator):
         )
         self.target_metrics = pd.read_csv(target_metrics_path)
         self.target_metrics.index += 1
-        self.referred_agg_path = referred_kpi_map_path
-        if not os.path.exists(self.merged_submetrics_path):
-            os.mkdir(self.merged_submetrics_path)
-        if not os.path.exists(self.aggregated_metrics_path):
-            os.mkdir(self.aggregated_metrics_path)
+        if os.path.exists(self.merged_submetrics_path):
+            os.rename(self.merged_submetrics_path, self.merged_submetrics_path + "_bak")
+        os.mkdir(self.merged_submetrics_path)
+        if os.path.exists(self.aggregated_metrics_path):
+            os.rename(
+                self.aggregated_metrics_path, self.aggregated_metrics_path + "_bak"
+            )
+        os.mkdir(self.aggregated_metrics_path)
 
     def _get_metric_index(self, metric_name: str):
         """Get metric index in metric names map."""
@@ -105,6 +107,16 @@ class PrometheusAggregator(Aggregator):
         except json.JSONDecodeError as e:
             print(f"{metric_name} in {self.metrics_path} cannot be decoded!")
         return Metric(metric_name, metric_data)
+
+    def _read_df_kpi(self, metric_index: int, metric_name: str):
+        df_kpi = pd.read_csv(
+            os.path.join(self.merged_submetrics_path, f"metric-{metric_index}.csv")
+        )
+        df_kpi["timestamp"] = pd.to_datetime(df_kpi["timestamp"])
+        df_kpi = df_kpi.set_index("timestamp").sort_index()
+        if metric_name.endswith("total") or metric_name.startswith("node_vmstat"):
+            df_kpi = df_kpi.apply(Aggregator.reduce_cumulative)
+        return df_kpi
 
     def merge_all_submetrics(self):
         num_metrics = len(self.target_metrics)
@@ -140,9 +152,7 @@ class PrometheusAggregator(Aggregator):
                 self.merged_submetrics_path, f"metric-{metric_index}-kpi-map.csv"
             )
         )
-        df_kpi = pd.read_csv(
-            os.path.join(self.merged_submetrics_path, f"metric-{metric_index}.csv")
-        ).set_index("timestamp")
+        df_kpi = self._read_df_kpi(metric_index, metric_name)
         if metric_name == "ALERTS":
             self.aggregate_alerts_time_series(metric_index, df_kpi_map, df_kpi)
         elif metric_name == "ALERTS_FOR_STATE":
@@ -162,10 +172,6 @@ class PrometheusAggregator(Aggregator):
         ):
             self.adapt_no_agg_time_series(metric_index, df_kpi_map, df_kpi)
 
-    @staticmethod
-    def index_list(series) -> list:
-        return series.to_list()
-
     def aggregate_alerts_time_series(
         self, metric_index: int, df_kpi_map: pd.DataFrame, df_kpi: pd.DataFrame
     ):
@@ -176,14 +182,12 @@ class PrometheusAggregator(Aggregator):
             df_kpi.drop(columns=f"value-{i}", inplace=True)
         df_kpi_map = df_kpi_map.drop(useless_kpi_indices)
         # create group columns for aggregation
-        group_columns = ["alertname", "container"]
+        group_columns = ["container"]
         df_kpi_map["container"] = df_kpi_map["container"].fillna("undefined")
         df_kpi_map = df_kpi_map[group_columns]
         # group indices by labels
         df_kpi_indices_to_agg = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(PrometheusAggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(
             metric_index,
@@ -204,14 +208,12 @@ class PrometheusAggregator(Aggregator):
         # transform df_kpi to boolean values according to timestamps in values
         df_kpi = df_kpi.notnull().astype("int")
         # create group columns for aggregation
-        group_columns = ["alertname", "container"]
+        group_columns = ["container"]
         df_kpi_map["container"] = df_kpi_map["container"].fillna("undefined")
         df_kpi_map = df_kpi_map[group_columns]
         # group indices by labels
         df_kpi_indices_to_agg = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(PrometheusAggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(
             metric_index,
@@ -240,9 +242,7 @@ class PrometheusAggregator(Aggregator):
             print(f"\tNo labels can be aggregated!")
         # group indices by labels
         df_kpi_indices_to_agg = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(PrometheusAggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(
             metric_index,
@@ -250,10 +250,7 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
-                "max",
                 "mean",
-                "median",
-                "std",
                 "count",
             ],
         )
@@ -265,9 +262,7 @@ class PrometheusAggregator(Aggregator):
         df_kpi_map = df_kpi_map[isunique.index[isunique]]
         group_columns = df_kpi_map.columns.to_list()
         df_kpi_indices_to_agg = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(PrometheusAggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(
             metric_index,
@@ -275,10 +270,7 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
-                "max",
                 "mean",
-                "median",
-                "std",
                 "count",
             ],
         )
@@ -305,9 +297,7 @@ class PrometheusAggregator(Aggregator):
         df_kpi_map = df_kpi_map[group_columns]
         # group indices by labels
         df_kpi_indices_to_agg = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(PrometheusAggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(
             metric_index,
@@ -315,10 +305,7 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
-                "max",
                 "mean",
-                "median",
-                "std",
                 "count",
             ],
         )
@@ -331,40 +318,12 @@ class PrometheusAggregator(Aggregator):
             useless_kpi_indices = df_kpi_map[df_kpi_map["namespace"] != "alms"].index
             for i in useless_kpi_indices:
                 df_kpi.drop(columns=f"value-{i}", inplace=True)
-            df_kpi_map = df_kpi_map.drop(useless_kpi_indices)
-        # copy time series
-        new_kpi_map_list = []
-        if self.referred_agg_path is not None:
-            df_referred_kpi_map = Aggregator.read_df_kpi_map(
-                metric_index, self.referred_agg_path
+        if len(df_kpi.columns) > 1:
+            print(
+                f"Adaptation should only apply to metric with only one column! Metric {metric_index} has more than one column!"
             )
-        new_kpi_map_index = 1
-        for i in df_kpi_map.index:
-            if self.referred_agg_path is not None:
-                # use referred KPI index
-                row = df_kpi_map.loc[i]
-                check_same_row = (df_referred_kpi_map == row).all(axis=1)
-                matched_row = check_same_row[check_same_row].index
-                if not matched_row.empty:
-                    new_kpi_map_index = int(matched_row[0])
-                else:
-                    continue
-            new_kpi_map = {
-                "index": new_kpi_map_index,
-                "kpi": df_kpi_map.loc[i].to_dict(),
-            }
-            new_kpi_map_list.append(new_kpi_map)
-            df_kpi.rename(
-                columns={f"value-{i}": f"agg-kpi-{new_kpi_map_index}"}, inplace=True
-            )
+        df_kpi.rename(columns={df_kpi.columns[0]: "value"}, inplace=True)
         if not df_kpi.empty:
-            with open(
-                os.path.join(
-                    self.aggregated_metrics_path, f"metric-{metric_index}-kpi-map.json"
-                ),
-                "w",
-            ) as fp:
-                json.dump(new_kpi_map_list, fp)
             df_kpi.to_csv(
                 os.path.join(self.aggregated_metrics_path, f"metric-{metric_index}.csv")
             )
@@ -376,34 +335,15 @@ class PrometheusAggregator(Aggregator):
         df_kpi: pd.DataFrame,
         aggregate_funcs: list,
     ):
-        if self.referred_agg_path is not None:
-            df_referred_kpi_map = Aggregator.read_df_kpi_map(
-                metric_index, self.referred_agg_path
-            )
-        else:
-            new_kpi_map_index = 1
-        new_kpi_map_list = []
         df_agg_list = []
         df_kpi_indices_to_agg = df_kpi_indices_to_agg.rename(
             columns={"index": "index_list"}
         ).reset_index()
         for i in df_kpi_indices_to_agg.index:
-            if self.referred_agg_path is not None:
-                # use referred KPI index
-                row = df_kpi_indices_to_agg.loc[i].drop("index_list")
-                check_same_row = (df_referred_kpi_map == row).all(axis=1)
-                matched_row = check_same_row[check_same_row].index
-                if not matched_row.empty:
-                    new_kpi_map_index = int(matched_row[0])
-                else:
-                    continue
-            # generate new KPI
-            new_kpi_map = {
-                "index": new_kpi_map_index,
-                "kpi": df_kpi_indices_to_agg.loc[i].drop("index_list").to_dict(),
-            }
-            new_kpi_map_list.append(new_kpi_map)
             # generate indices to be grouped
+            column_prefix = df_kpi_indices_to_agg[
+                df_kpi_indices_to_agg.drop(columns="index_list").columns[0]
+            ].loc[i]
             indices_in_df_kpi = [
                 int(column.removeprefix("value-"))
                 for column in df_kpi.columns.to_list()
@@ -417,23 +357,16 @@ class PrometheusAggregator(Aggregator):
                 warnings.simplefilter("ignore", category=RuntimeWarning)
                 df_metric_agg = df_metric_to_agg.agg(
                     aggregate_funcs, axis=1
-                ).add_prefix(f"agg-kpi-{new_kpi_map_index}-")
+                ).add_prefix(column_prefix + "-")
             df_agg_list.append(df_metric_agg)
-            new_kpi_map_index += 1
         df_complete_agg = pd.concat(df_agg_list, axis=1)
         if not df_complete_agg.empty:
-            with open(
-                os.path.join(
-                    self.aggregated_metrics_path, f"metric-{metric_index}-kpi-map.json"
-                ),
-                "w",
-            ) as fp:
-                json.dump(new_kpi_map_list, fp)
             df_complete_agg.to_csv(
                 os.path.join(self.aggregated_metrics_path, f"metric-{metric_index}.csv")
             )
 
     def aggregate_all_metrics(self):
+        """Aggregate all available metrics to reduce dimensionality."""
         metric_indices = [
             int(filename.removeprefix("metric-").removesuffix("-kpi-map.csv"))
             for filename in os.listdir(self.merged_submetrics_path)
@@ -444,6 +377,7 @@ class PrometheusAggregator(Aggregator):
             self.aggregate_one_metric(metric_index)
 
     def merge_metrics(self):
+        """Merge all metrics into one dataframe."""
         df_all_list = []
         metric_indices = [
             filename.removeprefix("metric-").removesuffix("-kpi-map.json")
