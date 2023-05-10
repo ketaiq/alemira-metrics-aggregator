@@ -16,7 +16,6 @@ class GCloudAggregator(Aggregator):
         metrics_folder: str,
         target_metrics_path: str,
         output_suffix: str = "",
-        referred_kpi_map_path: str = None,
     ):
         self.metrics_path = os.path.join(metrics_parent_path, metrics_folder)
         self.merged_submetrics_path = os.path.join(
@@ -29,7 +28,6 @@ class GCloudAggregator(Aggregator):
             metrics_parent_path, f"gcloud-complete-time-series{output_suffix}.csv"
         )
         self.df_target_metrics = pd.read_csv(target_metrics_path).set_index("index")
-        self.referred_agg_path = referred_kpi_map_path
         if not os.path.exists(self.merged_submetrics_path):
             os.mkdir(self.merged_submetrics_path)
         if not os.path.exists(self.aggregated_metrics_path):
@@ -143,9 +141,7 @@ class GCloudAggregator(Aggregator):
         group_columns = ["project_id"]
         df_same = df_kpi_map[group_columns]
         df_same = (
-            df_same.reset_index()
-            .groupby(group_columns)
-            .agg(Aggregator.index_list)
+            df_same.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_same)
 
@@ -170,9 +166,7 @@ class GCloudAggregator(Aggregator):
         group_columns = ["pod_name"]
         df_kpi_map = df_kpi_map[group_columns]
         df_kpi_map_unique = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(Aggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_kpi_map_unique)
 
@@ -183,9 +177,7 @@ class GCloudAggregator(Aggregator):
         print(f"Aggregating metric {metric_index} with selected labels ...")
         group_columns = df_kpi_map.columns.to_list()
         df_kpi_map_unique = (
-            df_kpi_map.reset_index()
-            .groupby(group_columns)
-            .agg(Aggregator.index_list)
+            df_kpi_map.reset_index().groupby(group_columns).agg(Aggregator.index_list)
         )
         self.aggregate(metric_index, df_kpi_map_unique)
 
@@ -252,33 +244,14 @@ class GCloudAggregator(Aggregator):
 
     def aggregate(self, metric_index: int, df_kpi_map_unique: pd.DataFrame):
         df_metric = self.get_df_metric(metric_index)
-        if self.referred_agg_path is not None:
-            df_referred_kpi_map = Aggregator.read_df_kpi_map(
-                metric_index, self.referred_agg_path
-            )
-        else:
-            new_kpi_map_index = 1
-        new_kpi_map_list = []
         df_agg_list = []
         df_kpi_map_unique = df_kpi_map_unique.rename(
             columns={"index": "index_list"}
         ).reset_index()
         for i in df_kpi_map_unique.index:
-            if self.referred_agg_path is not None:
-                # use referred KPI index
-                row = df_kpi_map_unique.loc[i].drop("index_list")
-                check_same_row = (df_referred_kpi_map == row).all(axis=1)
-                matched_row = check_same_row[check_same_row].index
-                if not matched_row.empty:
-                    new_kpi_map_index = int(matched_row[0])
-                else:
-                    continue
-            # generate new KPI map
-            new_kpi_map = {
-                "index": new_kpi_map_index,
-                "kpi": df_kpi_map_unique.loc[i].drop("index_list").to_dict(),
-            }
-            new_kpi_map_list.append(new_kpi_map)
+            column_prefix = df_kpi_map_unique[
+                df_kpi_map_unique.drop(columns="index_list").columns[0]
+            ].loc[i]
             # select columns to merge
             indices_with_metrics = [
                 int(re.search(r"kpi-([0-9]+)-.*", column)[1])
@@ -291,29 +264,19 @@ class GCloudAggregator(Aggregator):
                 for suffix in ["count", "mean"]:
                     columns_to_merge = [f"kpi-{i}-{suffix}" for i in valid_indices]
                     df_metric_to_agg = df_metric[columns_to_merge]
-                    df_metric_agg = (
-                        GCloudAggregator.gen_df_metric_agg(df_metric_to_agg)
-                        .add_prefix(f"agg-kpi-{new_kpi_map_index}-")
-                        .add_suffix(f"-d{suffix}")
-                    )
+                    df_metric_agg = GCloudAggregator.gen_df_metric_agg(
+                        df_metric_to_agg
+                    ).add_prefix(f"{column_prefix}-d{suffix}-")
                     df_agg_list.append(df_metric_agg)
             else:
                 columns_to_merge = [f"kpi-{i}-value" for i in valid_indices]
                 df_metric_to_agg = df_metric[columns_to_merge]
                 df_metric_agg = GCloudAggregator.gen_df_metric_agg(
                     df_metric_to_agg
-                ).add_prefix(f"agg-kpi-{new_kpi_map_index}-")
+                ).add_prefix(f"{column_prefix}-")
                 df_agg_list.append(df_metric_agg)
-            new_kpi_map_index += 1
         df_complete_agg = pd.concat(df_agg_list, axis=1)
         if not df_complete_agg.empty:
-            with open(
-                os.path.join(
-                    self.aggregated_metrics_path, f"metric-{metric_index}-kpi-map.json"
-                ),
-                "w",
-            ) as fp:
-                json.dump(new_kpi_map_list, fp)
             df_complete_agg.to_csv(
                 os.path.join(self.aggregated_metrics_path, f"metric-{metric_index}.csv")
             )

@@ -79,15 +79,11 @@ class PrometheusAggregator(Aggregator):
         )
         self.target_metrics = pd.read_csv(target_metrics_path)
         self.target_metrics.index += 1
-        if os.path.exists(self.merged_submetrics_path):
-            os.rename(self.merged_submetrics_path, self.merged_submetrics_path + "_bak")
-        os.mkdir(self.merged_submetrics_path)
-        if os.path.exists(self.aggregated_metrics_path):
-            os.rename(
-                self.aggregated_metrics_path, self.aggregated_metrics_path + "_bak"
-            )
-        os.mkdir(self.aggregated_metrics_path)
-
+        if not os.path.exists(self.merged_submetrics_path):
+            os.mkdir(self.merged_submetrics_path)
+        if not os.path.exists(self.aggregated_metrics_path):
+            os.mkdir(self.aggregated_metrics_path)
+        
     def _get_metric_index(self, metric_name: str):
         """Get metric index in metric names map."""
         metric_names_map_path = os.path.join(self.metrics_path, "metric_names_map.json")

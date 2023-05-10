@@ -243,12 +243,12 @@ def main():
     aggregate_faulty_metrics_in_folder()
     # aggregate_faulty_metrics("alemira_failure_injection_log_linear.csv")
 
-    merge_normal_metrics()
-    merge_faulty_metrics_from_aggregated("day")
+    # merge_normal_metrics()
+    # merge_faulty_metrics_from_aggregated("day")
 
-    # exp_name = "day-8-constant-memory-stress-userapi-315"
-    # aggregate_faulty_metrics_in_one_experiment(exp_name)
-    # merge_faulty_metrics_from_one_experiment(exp_name)
+    exp_name = "day-8-linear-memory-stress-userapi-290"
+    aggregate_faulty_metrics_in_one_experiment(exp_name)
+    merge_faulty_metrics_from_one_experiment(exp_name)
 
 
 if __name__ == "__main__":
