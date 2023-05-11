@@ -10,7 +10,7 @@ from app import (
     NORMAL_PATH,
     PROMETHEUS_TARGET_METRICS_PATH,
 )
-
+import shutil
 from app.aggregator import Aggregator
 
 
@@ -317,3 +317,19 @@ def merge_faulty_metrics_from_one_experiment(exp_name: str):
     df_complete.to_csv(
         os.path.join(FAILURE_INJECTION_PATH, exp_name, f"{exp_name}.csv")
     )
+
+
+def copy_merged_faulty_metrics_for_experiments(common_prefix: str):
+    folders = [
+        folder
+        for folder in os.listdir(FAILURE_INJECTION_PATH)
+        if folder.startswith(common_prefix)
+    ]
+    dest = os.path.join(FAILURE_INJECTION_PATH, "merged_metrics")
+    if not os.path.exists(dest):
+        os.mkdir(dest)
+    for folder in folders:
+        shutil.copy(
+            os.path.join(FAILURE_INJECTION_PATH, folder, f"{folder}.csv"),
+            os.path.join(dest, f"{folder}.csv"),
+        )

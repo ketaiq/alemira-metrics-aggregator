@@ -17,6 +17,9 @@ class GCloudAggregator(Aggregator):
         target_metrics_path: str,
         output_suffix: str = "",
     ):
+        if "day" in metrics_folder:
+            day = re.search(r"gcloud_metrics-day-([0-9]+)", metrics_folder)[1]
+            output_suffix = f"_day_{day}"
         self.metrics_path = os.path.join(metrics_parent_path, metrics_folder)
         self.merged_submetrics_path = os.path.join(
             metrics_parent_path, "gcloud_combined" + output_suffix

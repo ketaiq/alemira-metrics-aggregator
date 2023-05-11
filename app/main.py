@@ -17,6 +17,7 @@ from app import (
 from app.gcloud_aggregator import GCloudAggregator
 from app.locust_aggregator import LocustAggregator
 from app.merger import (
+    copy_merged_faulty_metrics_for_experiments,
     merge_faulty_metrics_from_aggregated,
     merge_faulty_metrics_from_one_experiment,
     merge_faulty_metrics_from_unified,
@@ -101,7 +102,6 @@ def aggregate_faulty_metrics_in_one_experiment(exp_name: str):
         exp_path,
         "gcloud_metrics",
         GCLOUD_TARGET_METRICS_PATH,
-        referred_kpi_map_path=GCLOUD_UNIFIED_PATH,
     )
     gcloud_aggregator.merge_all_submetrics()
     gcloud_aggregator.aggregate_all_metrics()
@@ -239,14 +239,15 @@ def gen_gcloud_target_metrics():
 
 
 def main():
-    aggregate_normal_metrics()
-    aggregate_faulty_metrics_in_folder()
+    # aggregate_normal_metrics()
+    # aggregate_faulty_metrics_in_folder()
     # aggregate_faulty_metrics("alemira_failure_injection_log_linear.csv")
 
     # merge_normal_metrics()
     # merge_faulty_metrics_from_aggregated("day")
+    # copy_merged_faulty_metrics_for_experiments("day")
 
-    exp_name = "day-8-linear-memory-stress-userapi-290"
+    exp_name = "day-8-linear-network-delay-userapi-2"
     aggregate_faulty_metrics_in_one_experiment(exp_name)
     merge_faulty_metrics_from_one_experiment(exp_name)
 

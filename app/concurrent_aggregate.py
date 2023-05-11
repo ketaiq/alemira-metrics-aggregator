@@ -25,7 +25,7 @@ def perform_aggregation(
         gcloud_metrics_folder,
         GCLOUD_TARGET_METRICS_PATH,
     )
-    # gcloud_aggregator.merge_all_submetrics()
+    gcloud_aggregator.merge_all_submetrics()
     gcloud_aggregator.aggregate_all_metrics()
 
     # prometheus_aggregator = PrometheusAggregator(
@@ -45,23 +45,23 @@ def perform_aggregation(
 def gen_paths() -> list:
     paths = []
     # paths for normal metrics
-    for i in range(1, 15):
-        gcloud_metrics_parent_path = NORMAL_GCLOUD_METRICS_PATH
-        gcloud_metrics_folder = f"gcloud_metrics-day-{i}"
-        prom_metrics_parent_path = os.path.join(NORMAL_PATH, f"day-{i}")
-        prom_metrics_folder = "metrics"
-        locust_metrics_parent_path = NORMAL_PATH
-        locust_metrics_folder = f"day-{i}"
-        paths.append(
-            (
-                gcloud_metrics_parent_path,
-                gcloud_metrics_folder,
-                prom_metrics_parent_path,
-                prom_metrics_folder,
-                locust_metrics_parent_path,
-                locust_metrics_folder,
-            )
-        )
+    # for i in range(1, 15):
+    #     gcloud_metrics_parent_path = NORMAL_GCLOUD_METRICS_PATH
+    #     gcloud_metrics_folder = f"gcloud_metrics-day-{i}"
+    #     prom_metrics_parent_path = os.path.join(NORMAL_PATH, f"day-{i}")
+    #     prom_metrics_folder = "metrics"
+    #     locust_metrics_parent_path = NORMAL_PATH
+    #     locust_metrics_folder = f"day-{i}"
+    #     paths.append(
+    #         (
+    #             gcloud_metrics_parent_path,
+    #             gcloud_metrics_folder,
+    #             prom_metrics_parent_path,
+    #             prom_metrics_folder,
+    #             locust_metrics_parent_path,
+    #             locust_metrics_folder,
+    #         )
+    #     )
     # paths for faulty metrics
     folders = [
         folder
@@ -90,5 +90,7 @@ def gen_paths() -> list:
 
 if __name__ == "__main__":
     paths = gen_paths()
-    with Pool(processes=5) as pool:
+    with Pool(processes=6) as pool:
         pool.starmap(perform_aggregation, paths)
+        pool.close()
+        pool.join()
