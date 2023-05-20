@@ -247,7 +247,7 @@ def main():
     # merge_faulty_metrics_from_aggregated("day")
     # copy_merged_faulty_metrics_for_experiments("day")
 
-    exp_name = "day-8-linear-network-delay-userapi-2"
+    exp_name = "day-8-linear-network-corrupt-userapi-052009"
     aggregate_faulty_metrics_in_one_experiment(exp_name)
     merge_faulty_metrics_from_one_experiment(exp_name)
 
