@@ -238,21 +238,19 @@ def merge_faulty_metrics_from_unified():
         )
 
 
-def merge_faulty_metrics_from_aggregated(common_prefix: str):
+def merge_faulty_metrics_from_aggregated():
     gcloud_paths = [
         os.path.join(FAILURE_INJECTION_PATH, folder, "gcloud_aggregated")
         for folder in os.listdir(FAILURE_INJECTION_PATH)
-        if folder.startswith(common_prefix)
+        if "userapi" in folder
     ]
     prometheus_paths = [
         os.path.join(FAILURE_INJECTION_PATH, folder, "prometheus_aggregated")
         for folder in os.listdir(FAILURE_INJECTION_PATH)
-        if folder.startswith(common_prefix)
+        if "userapi" in folder
     ]
     folders = [
-        folder
-        for folder in os.listdir(FAILURE_INJECTION_PATH)
-        if folder.startswith(common_prefix)
+        folder for folder in os.listdir(FAILURE_INJECTION_PATH) if "userapi" in folder
     ]
     if len(gcloud_paths) != len(prometheus_paths):
         print("Two paths list have different lengths!")
@@ -319,11 +317,9 @@ def merge_faulty_metrics_from_one_experiment(exp_name: str):
     )
 
 
-def copy_merged_faulty_metrics_for_experiments(common_prefix: str):
+def copy_merged_faulty_metrics_for_experiments():
     folders = [
-        folder
-        for folder in os.listdir(FAILURE_INJECTION_PATH)
-        if folder.startswith(common_prefix)
+        folder for folder in os.listdir(FAILURE_INJECTION_PATH) if "userapi" in folder
     ]
     dest = os.path.join(FAILURE_INJECTION_PATH, "merged_metrics")
     if not os.path.exists(dest):
