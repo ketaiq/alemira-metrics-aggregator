@@ -76,6 +76,7 @@ class GCloudAggregator(Aggregator):
         )
 
     def merge_all_submetrics(self):
+        print(f"merge {self.metrics_path}")
         for metric_index in self.df_target_metrics.index:
             metric_path = os.path.join(self.metrics_path, f"metric-type-{metric_index}")
             self._merge_submetrics(metric_path, metric_index)
@@ -128,15 +129,6 @@ class GCloudAggregator(Aggregator):
             if "count" in col or "mean" in col or "sum_of_squared_deviation" in col:
                 return True
         return False
-
-    @staticmethod
-    def percentile(n):
-        def percentile_(series: pd.Series):
-            return series.quantile(n)
-
-        n_int = int(n * 100)
-        percentile_.__name__ = f"percentile_{n_int}"
-        return percentile_
 
     def aggregate_with_all_kpis(self, metric_index: int, df_kpi_map: pd.DataFrame):
         """Aggregate KPIs with only different node names."""
@@ -238,8 +230,12 @@ class GCloudAggregator(Aggregator):
             df_metric_agg = df_metric_to_agg.agg(
                 [
                     "min",
+                    "max",
                     "mean",
+                    "median",
                     "count",
+                    Aggregator.first_quartile,
+                    Aggregator.third_quartile,
                 ],
                 axis=1,
             )

@@ -83,7 +83,7 @@ class PrometheusAggregator(Aggregator):
             os.mkdir(self.merged_submetrics_path)
         if not os.path.exists(self.aggregated_metrics_path):
             os.mkdir(self.aggregated_metrics_path)
-        
+
     def _get_metric_index(self, metric_name: str):
         """Get metric index in metric names map."""
         metric_names_map_path = os.path.join(self.metrics_path, "metric_names_map.json")
@@ -115,6 +115,7 @@ class PrometheusAggregator(Aggregator):
         return df_kpi
 
     def merge_all_submetrics(self):
+        print(f"merge {self.metrics_path}")
         num_metrics = len(self.target_metrics)
         for metric_index in self.target_metrics.index:
             metric_name = self.target_metrics.loc[metric_index]["name"]
@@ -246,8 +247,12 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
+                "max",
                 "mean",
+                "median",
                 "count",
+                Aggregator.first_quartile,
+                Aggregator.third_quartile,
             ],
         )
 
@@ -266,8 +271,12 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
+                "max",
                 "mean",
+                "median",
                 "count",
+                Aggregator.first_quartile,
+                Aggregator.third_quartile,
             ],
         )
 
@@ -301,8 +310,12 @@ class PrometheusAggregator(Aggregator):
             df_kpi,
             [
                 "min",
+                "max",
                 "mean",
+                "median",
                 "count",
+                Aggregator.first_quartile,
+                Aggregator.third_quartile,
             ],
         )
 

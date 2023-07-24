@@ -1,7 +1,7 @@
 import os
 
 
-EXPERIMENTS_PATH = "/Users/ketai/Library/CloudStorage/OneDrive-USI/Thesis/experiments"
+EXPERIMENTS_PATH = "/Users/ketai/Downloads/Thesis/experiments"
 FAILURE_INJECTION_PATH = os.path.join(EXPERIMENTS_PATH, "failure injection")
 NORMAL_PATH = os.path.join(EXPERIMENTS_PATH, "normal")
 NORMAL_GCLOUD_METRICS_PATH = os.path.join(NORMAL_PATH, "gcloud-metrics")

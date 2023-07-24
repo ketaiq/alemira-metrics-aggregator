@@ -35,3 +35,20 @@ class Aggregator(ABC):
     @staticmethod
     def index_list(series) -> list:
         return series.to_list()
+
+    @staticmethod
+    def first_quartile(series: pd.Series):
+        return series.quantile(0.25)
+
+    @staticmethod
+    def third_quartile(series: pd.Series):
+        return series.quantile(0.75)
+
+    @staticmethod
+    def percentile(n):
+        def percentile_(series: pd.Series):
+            return series.quantile(n)
+
+        n_int = int(n * 100)
+        percentile_.__name__ = f"percentile_{n_int}"
+        return percentile_
