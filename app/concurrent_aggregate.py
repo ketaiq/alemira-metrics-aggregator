@@ -3,6 +3,7 @@ import os
 
 import pandas as pd
 from app import (
+    EXTRA_EXPERIMENTS_PATH,
     FAILURE_INJECTION_PATH,
     GCLOUD_TARGET_METRICS_PATH,
     NORMAL_GCLOUD_METRICS_PATH,
@@ -52,12 +53,18 @@ def perform_aggregation(
 def gen_paths(log_filename: str) -> list:
     paths = []
     # paths for normal metrics
-    for i in range(1, 15):
-        gcloud_metrics_parent_path = NORMAL_GCLOUD_METRICS_PATH
-        gcloud_metrics_folder = f"gcloud_metrics-day-{i}"
-        prom_metrics_parent_path = os.path.join(NORMAL_PATH, f"day-{i}")
-        prom_metrics_folder = "metrics"
-        locust_metrics_parent_path = NORMAL_PATH
+    for i in range(1, 8):
+        gcloud_metrics_parent_path = os.path.join(
+            EXTRA_EXPERIMENTS_PATH, "extra-1-week", f"day-{i}"
+        )
+        gcloud_metrics_folder = f"gcloud_metrics"
+        prom_metrics_parent_path = os.path.join(
+            EXTRA_EXPERIMENTS_PATH, "extra-1-week", f"day-{i}"
+        )
+        prom_metrics_folder = "prometheus-metrics"
+        locust_metrics_parent_path = os.path.join(
+            EXTRA_EXPERIMENTS_PATH, "extra-1-week"
+        )
         locust_metrics_folder = f"day-{i}"
         paths.append(
             (
@@ -70,25 +77,25 @@ def gen_paths(log_filename: str) -> list:
             )
         )
     # paths for faulty metrics
-    df = pd.read_csv(os.path.join(FAILURE_INJECTION_PATH, log_filename))
-    folders = df["folder_name"].to_list()
-    for folder in folders:
-        gcloud_metrics_parent_path = os.path.join(FAILURE_INJECTION_PATH, folder)
-        gcloud_metrics_folder = "gcloud_metrics"
-        prom_metrics_parent_path = os.path.join(FAILURE_INJECTION_PATH, folder)
-        prom_metrics_folder = "prometheus-metrics"
-        locust_metrics_parent_path = FAILURE_INJECTION_PATH
-        locust_metrics_folder = folder
-        paths.append(
-            (
-                gcloud_metrics_parent_path,
-                gcloud_metrics_folder,
-                prom_metrics_parent_path,
-                prom_metrics_folder,
-                locust_metrics_parent_path,
-                locust_metrics_folder,
-            )
-        )
+    # df = pd.read_csv(os.path.join(FAILURE_INJECTION_PATH, log_filename))
+    # folders = df["folder_name"].to_list()
+    # for folder in folders:
+    #     gcloud_metrics_parent_path = os.path.join(FAILURE_INJECTION_PATH, folder)
+    #     gcloud_metrics_folder = "gcloud_metrics"
+    #     prom_metrics_parent_path = os.path.join(FAILURE_INJECTION_PATH, folder)
+    #     prom_metrics_folder = "prometheus-metrics"
+    #     locust_metrics_parent_path = FAILURE_INJECTION_PATH
+    #     locust_metrics_folder = folder
+    #     paths.append(
+    #         (
+    #             gcloud_metrics_parent_path,
+    #             gcloud_metrics_folder,
+    #             prom_metrics_parent_path,
+    #             prom_metrics_folder,
+    #             locust_metrics_parent_path,
+    #             locust_metrics_folder,
+    #         )
+    #     )
     return paths
 
 
@@ -98,6 +105,6 @@ if __name__ == "__main__":
         pool.starmap(perform_aggregation, paths)
         pool.close()
         pool.join()
-    merge_normal_metrics()
-    merge_faulty_metrics_from_aggregated()
-    copy_merged_faulty_metrics_for_experiments()
+    merge_normal_metrics(os.path.join(EXTRA_EXPERIMENTS_PATH, "extra-1-week"))
+    # merge_faulty_metrics_from_aggregated()
+    # copy_merged_faulty_metrics_for_experiments()

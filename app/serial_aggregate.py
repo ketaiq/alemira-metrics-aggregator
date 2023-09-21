@@ -73,7 +73,7 @@ def gen_gcloud_target_metrics():
 
 
 def main():
-    exp_name = "linear-network-loss-userapi-072219"
+    exp_name = "linear-network-corrupt-redis-092111"
     aggregate_faulty_metrics_in_one_experiment(exp_name)
     merge_faulty_metrics_from_one_experiment(exp_name)
 

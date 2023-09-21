@@ -77,7 +77,12 @@ class GCloudAggregator(Aggregator):
 
     def merge_all_submetrics(self):
         print(f"merge {self.metrics_path}")
-        for metric_index in self.df_target_metrics.index:
+        metric_types_indices = [
+            f.split("-")[-1]
+            for f in os.listdir(self.metrics_path)
+            if f.startswith("metric-type")
+        ]
+        for metric_index in metric_types_indices:
             metric_path = os.path.join(self.metrics_path, f"metric-type-{metric_index}")
             self._merge_submetrics(metric_path, metric_index)
 
@@ -93,12 +98,14 @@ class GCloudAggregator(Aggregator):
             df_metric = df_metric.apply(Aggregator.reduce_cumulative)
         return df_metric
 
-    def aggregate_one_metric(self, metric_index: int):
+    def aggregate_one_metric(self, metric_index: int, for_extra: bool = False):
         """Aggregate all available KPIs in one metric to reduce dimensionality."""
         metric_name = self.df_target_metrics.loc[metric_index]["name"]
         df_kpi_map = Aggregator.read_df_kpi_map(
             metric_index, self.merged_submetrics_path
         )
+        if "node_name" in df_kpi_map.columns:
+            df_kpi_map["node_name"] = df_kpi_map["node_name"].str.slice(-4)
         if metric_name.startswith("kubernetes.io/autoscaler"):
             self.adapt_no_agg(metric_index, df_kpi_map)
         elif metric_name.startswith("kubernetes.io/container"):
@@ -107,13 +114,23 @@ class GCloudAggregator(Aggregator):
             "networking.googleapis.com/pod_flow"
         ):
             self.aggregate_with_pod_service(metric_index, df_kpi_map)
-        elif metric_name.startswith("kubernetes.io/node") or metric_name.startswith(
-            "networking.googleapis.com/vpc_flow"
+        elif (
+            metric_name.startswith("kubernetes.io/node")
+            and not for_extra
+            or metric_name.startswith("networking.googleapis.com/vpc_flow")
         ):
             self.aggregate_with_all_kpis(metric_index, df_kpi_map)
-        elif metric_name.startswith(
-            "networking.googleapis.com/node_flow"
-        ) or metric_name.startswith("networking.googleapis.com/vm_flow"):
+        elif metric_name.startswith("kubernetes.io/node") and for_extra:
+            self.adapt_no_agg(metric_index, df_kpi_map)
+        elif (
+            metric_name.startswith("networking.googleapis.com/node_flow") and for_extra
+        ):
+            self.aggregate_with_selected_labels(metric_index, df_kpi_map[["node_name"]])
+        elif (
+            metric_name.startswith("networking.googleapis.com/node_flow")
+            and not for_extra
+            or metric_name.startswith("networking.googleapis.com/vm_flow")
+        ):
             if "remote_network" in df_kpi_map.columns:
                 self.aggregate_with_selected_labels(
                     metric_index, df_kpi_map[["remote_network"]]
@@ -179,46 +196,30 @@ class GCloudAggregator(Aggregator):
     def adapt_no_agg(self, metric_index: int, df_kpi_map: pd.DataFrame):
         """Adapt metrics no need for aggregation."""
         print(f"Adapting metric {metric_index} without aggregation ...")
+        # drop columns with the same value
+        nunique = df_kpi_map.nunique()
+        cols_to_drop = nunique[nunique == 1].index
+        df_kpi_map = df_kpi_map.drop(cols_to_drop, axis=1)
+        # reduce duplicates
+        df_kpi_map = df_kpi_map.T.drop_duplicates().T
+        if (
+            "container_name" in df_kpi_map.columns
+            and "controller_name" in df_kpi_map.columns
+        ):
+            df_kpi_map = df_kpi_map[["container_name"]]
+        # adapt kpi name
         df_metric = self.get_df_metric(metric_index)
-        new_kpi_map_list = []
-        if self.referred_agg_path is not None:
-            df_referred_kpi_map = Aggregator.read_df_kpi_map(
-                metric_index, self.referred_agg_path
-            )
-        else:
-            new_kpi_map_index = 1
         for i in df_kpi_map.index:
             original_column_name = f"kpi-{i}-value"
             if original_column_name in df_metric.columns:
-                if self.referred_agg_path is not None:
-                    # use referred KPI index
-                    row = df_kpi_map.loc[i]
-                    check_same_row = (df_referred_kpi_map == row).all(axis=1)
-                    matched_row = check_same_row[check_same_row].index
-                    if not matched_row.empty:
-                        new_kpi_map_index = int(matched_row[0])
-                    else:
-                        continue
-                # adapt KPI map
-                new_kpi_map = {
-                    "index": new_kpi_map_index,
-                    "kpi": df_kpi_map.loc[i].to_dict(),
-                }
-                new_kpi_map_list.append(new_kpi_map)
-                # adapt metric
+                new_col_name = ""
+                for k, v in df_kpi_map.loc[i].to_dict().items():
+                    new_col_name += str(k) + "-" + str(v) + "-"
+                new_col_name = new_col_name[:-1]
                 df_metric.rename(
-                    columns={original_column_name: f"agg-kpi-{new_kpi_map_index}"},
+                    columns={original_column_name: new_col_name},
                     inplace=True,
                 )
-                new_kpi_map_index += 1
-
-        with open(
-            os.path.join(
-                self.aggregated_metrics_path, f"metric-{metric_index}-kpi-map.json"
-            ),
-            "w",
-        ) as fp:
-            json.dump(new_kpi_map_list, fp)
         df_metric.to_csv(
             os.path.join(self.aggregated_metrics_path, f"metric-{metric_index}.csv")
         )
@@ -284,7 +285,7 @@ class GCloudAggregator(Aggregator):
         """Aggregate all available metrics to reduce dimensionality."""
         metric_indices = self.get_metric_indices()
         for metric_index in metric_indices:
-            self.aggregate_one_metric(metric_index)
+            self.aggregate_one_metric(metric_index, True)
 
     def merge_metrics(self):
         """Merge all metrics into one dataframe."""
