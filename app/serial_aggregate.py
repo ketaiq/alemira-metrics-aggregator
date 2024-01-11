@@ -34,7 +34,7 @@ def aggregate_faulty_metrics_in_one_experiment(exp_name: str):
     gcloud_aggregator = GCloudAggregator(
         exp_path,
         "gcloud_metrics",
-        GCLOUD_TARGET_METRICS_PATH,
+        METRIC_TYPE_MAP_PATH,
     )
     gcloud_aggregator.merge_all_submetrics()
     gcloud_aggregator.aggregate_all_metrics()
@@ -73,7 +73,7 @@ def gen_gcloud_target_metrics():
 
 
 def main():
-    exp_name = "linear-network-corrupt-redis-092111"
+    exp_name = "linear-memory-stress-identityapi-010210"
     aggregate_faulty_metrics_in_one_experiment(exp_name)
     merge_faulty_metrics_from_one_experiment(exp_name)
 

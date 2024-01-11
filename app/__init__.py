@@ -7,7 +7,7 @@ EXTRA_EXPERIMENTS_PATH = "/Users/ketai/Downloads/extra-experiments"
 FAILURE_INJECTION_PATH = EXTRA_EXPERIMENTS_PATH
 NORMAL_PATH = os.path.join(EXPERIMENTS_PATH, "normal")
 NORMAL_GCLOUD_METRICS_PATH = os.path.join(NORMAL_PATH, "gcloud-metrics")
-METRIC_TYPE_MAP_PATH = os.path.join(NORMAL_GCLOUD_METRICS_PATH, "metric_type_map.csv")
+METRIC_TYPE_MAP_PATH = os.path.join(NORMAL_PATH, "metric_type_map.csv")
 PROMETHEUS_TARGET_METRICS_PATH = os.path.join(
     NORMAL_PATH, "prometheus_target_metrics.csv"
 )
